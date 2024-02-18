@@ -1,15 +1,15 @@
-export default {
+module.exports = {
   entry: './dist/src/server.js',
   output: {
-    filename: 'app.min.js',
+    filename: 'server.min.js',
     path: __dirname + '/dist',
   },
-  target: "node",
+  target: 'node',
   module: {
     rules: [
       {
         test: /^node\:/,
-        loader: "node-loader",
+        loader: 'node-loader',
       },
     ],
   },
