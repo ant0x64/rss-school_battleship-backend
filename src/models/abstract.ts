@@ -1,4 +1,4 @@
-import { TableRow } from 'services/db.service';
+import { TableRow } from './../services/db.service';
 
 export default interface DatabaseModel extends TableRow {}
 

@@ -1,67 +1,80 @@
+import EventEmitter from 'node:events';
+import Messenger, {
+  RequestTypes,
+  ResponceTypes,
+  WebSocketPlayer,
+  MessageBodyError,
+} from './services/messenger';
 import Database from './services/db.service';
+
 import User, { createUserModel } from './models/user';
 import Player from './models/player';
 import Room from './models/room';
-
-import { WebSocket } from 'ws';
-import Game from 'models/game';
+import Game, { GameEvents } from './models/game';
 
 export enum AppEvents {
   WINNERS = 'winners',
   ROOMS = 'rooms',
-  GAME = 'game',
 }
 
-export default class App {
-  #database: Database = new Database();
-  #players: Map<any, Player> = new Map<any, Player>();
-  #rooms: Map<any, Room> = new Map<any, Room>();
-  #games: Map<any, Game> = new Map<any, Game>();
+export class AppError extends Error {}
 
-  callbacks: { [key in AppEvents]: CallableFunction[] } = {
-    winners: [],
-    rooms: [],
-    game: [],
-  };
+export default class App extends EventEmitter {
+  private _database: Database = new Database();
+  private _players: Map<any, Player> = new Map<any, Player>();
+  private _rooms: Map<any, Room> = new Map<any, Room>();
+  private _games: Map<any, Game> = new Map<any, Game>();
 
-  getPlayer(id: string) {
-    return this.#players.get(id);
-  }
-
-  getPlayerByWs(ws: WebSocket): Player | undefined {
-    let player;
-    this.#players.forEach((p) => {
-      if (p.ws === ws) {
-        player = p;
-        return;
-      }
+  constructor() {
+    super();
+    this.on(AppEvents.WINNERS, () => {
+      Messenger.sendResponce(
+        ResponceTypes.WINNERS,
+        Array.from(this._players, ([, player]) => player.ws),
+        Array.from(this._players, ([, player]) => ({
+          name: player.user.name,
+          wins: player.wins,
+        })),
+      );
     });
-    return player;
+    this.on(AppEvents.ROOMS, () => {
+      Messenger.sendResponce(
+        ResponceTypes.ROOMS,
+        Array.from(this._players, ([, player]) => player.ws),
+        Array.from(this._rooms, ([, room]) => ({
+          roomId: room.id,
+          roomUsers: room.players.map((p) => ({
+            name: p.user.name,
+            index: p.user.id,
+          })),
+        })),
+      );
+    });
   }
 
-  getAllPlayers() {
-    return Array.from(this.#players.values());
+  protected getPlayer(id: string) {
+    return this._players.get(id);
   }
 
-  getRoom(id: string) {
-    return this.#rooms.get(id);
+  protected getRoom(id: string) {
+    return this._rooms.get(id);
   }
 
-  getAllRooms() {
-    return Array.from(this.#rooms.values());
+  protected getGame(id: string) {
+    return this._games.get(id);
   }
 
-  addRoom(player: Player): Room {
+  protected addRoom(player: Player): Room {
     let room = this.getRoom(player.user.id);
     if (!room) {
       room = new Room(player.user.id);
-      this.#rooms.set(player.user.id, room);
-      this.dispatch(AppEvents.ROOMS);
+      this._rooms.set(player.user.id, room);
+      this.emit(AppEvents.ROOMS);
     }
     return room;
   }
 
-  addPlayerToRoom(player: Player, room_id: string) {
+  protected addPlayerToRoom(player: Player, room_id: string) {
     const room = this.getRoom(room_id);
     if (!room || room.players.some((p) => p === player)) {
       return;
@@ -70,60 +83,125 @@ export default class App {
     room.players.push(player);
     if (room.isFull()) {
       const game = room.buildGame();
-      this.#games.set(room_id, game);
-      this.#rooms.delete(room_id);
-      this.dispatch(AppEvents.GAME, game);
+      this._games.set(room_id, game);
+      this._rooms.delete(room_id);
+
+      game.once(GameEvents.FINISHED, () => {
+        this._games.delete(game.id);
+        this.emit(AppEvents.WINNERS);
+      });
     }
 
-    this.dispatch(AppEvents.ROOMS);
+    this.emit(AppEvents.ROOMS);
   }
 
-  authUser(
-    ws: WebSocket,
+  protected authUser(
+    ws: WebSocketPlayer,
     name?: string,
     password?: string,
-  ): Player | undefined {
-    const user = (this.#database
+  ): Player {
+    const user = (this._database
       .getTable('user')
       .all()
       .find((row) => {
         return row.name === name;
       }) ||
-      this.#database
+      this._database
         .getTable('user')
         .add(createUserModel({ name, password }))) as User;
 
     if (!user.id || password !== user.password) {
-      return;
+      throw new AppError('Incorrect password');
     }
 
-    if (!this.#players.has(user.id)) {
-      const player = new Player(user, ws);
-      this.#players.set(user.id, player);
-      ws.on('close', () => {
-        this.#players.delete(user.id);
-        this.dispatch(AppEvents.ROOMS);
-        this.dispatch(AppEvents.WINNERS);
-      });
-
-      this.dispatch(AppEvents.ROOMS);
-      this.dispatch(AppEvents.WINNERS);
+    if (this._players.has(user.id)) {
+      throw new AppError('You already have an open session');
     }
 
-    return this.#players.get(user.id);
+    const player = new Player(user, ws);
+    ws.player = player;
+    this._players.set(user.id, player);
+    ws.on('close', () => {
+      this._players.delete(user.id);
+      this.emit(AppEvents.ROOMS);
+      this.emit(AppEvents.WINNERS);
+    });
+
+    this.emit(AppEvents.ROOMS);
+    this.emit(AppEvents.WINNERS);
+
+    return this._players.get(user.id) as Player;
   }
 
-  authUserByCookie(cookie: string) {
+  authUserByCookie(ws: WebSocketPlayer, cookie: string) {
+    ws;
     return cookie ? undefined : undefined;
   }
 
-  on(event: AppEvents, callback: CallableFunction) {
-    this.callbacks[event].push(callback);
-  }
+  handleMessage(ws: WebSocketPlayer, message: string) {
+    const request = Messenger.parseRequest(message);
+    if (!request) {
+      throw new MessageBodyError();
+    }
 
-  dispatch(event: AppEvents, ...args: any) {
-    this.callbacks[event].map((callback) => {
-      callback(...args);
-    });
+    const player = ws.player;
+
+    if (request.type === RequestTypes.REG) {
+      if (!player) {
+        try {
+          const player = this.authUser(
+            ws,
+            request.data.name?.toString(),
+            request.data.password?.toString(),
+          );
+          Messenger.sendResponce(ResponceTypes.REG, player.ws, {
+            name: player.user.name,
+            index: player.user.id,
+            error: false,
+            errorText: null,
+          });
+        } catch (err) {
+          Messenger.sendResponce(ResponceTypes.REG, ws, {
+            error: true,
+            errorText: err instanceof Error ? err.message : err,
+          });
+        }
+      }
+      return;
+    }
+
+    if (!player) {
+      Messenger.sendResponce(ResponceTypes.REG, ws, {
+        error: true,
+        errorText: 'Need to be authorized',
+      });
+
+      return;
+    }
+
+    switch (request.type) {
+      case RequestTypes.ROOM_CREATE:
+        this.addRoom(player);
+        break;
+      case RequestTypes.ROOM_PLAYER:
+        this.addPlayerToRoom(player, request.data.indexRoom as string);
+        break;
+      case RequestTypes.GAME_SHIPS: {
+        const game = this.getGame(request.data.gameId as string);
+        if (!game) {
+          throw new AppError();
+        }
+        game.addBoard(player, request.data.ships as object);
+        break;
+      }
+      case RequestTypes.GAME_ATACK: {
+        const game = this.getGame(request.data.gameId as string);
+        if (!game) {
+          throw new AppError();
+        }
+        game.atack(player, request.data.x as number, request.data.y as number);
+        break;
+      }
+    }
   }
 }

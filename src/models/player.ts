@@ -1,6 +1,9 @@
 import User from './user';
 
-import { WebSocketPlayer } from 'handlers/wss';
+import Messenger, {
+  ResponceTypes,
+  WebSocketPlayer,
+} from './../services/messenger';
 
 export default class Player {
   ws: WebSocketPlayer;
@@ -10,5 +13,9 @@ export default class Player {
   constructor(user: User, ws: WebSocketPlayer) {
     this.user = user;
     this.ws = ws;
+  }
+
+  message(type: ResponceTypes, data: object) {
+    Messenger.sendResponce(type, this.ws, data);
   }
 }
