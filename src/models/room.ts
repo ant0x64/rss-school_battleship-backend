@@ -2,21 +2,40 @@ import Player from './player';
 import Game, { GamePlayersError } from './game';
 
 export default class Room {
-  players: Player[] = [];
-  id: string;
+  protected players: Map<any, Player> = new Map();
+  readonly id: string;
 
   constructor(id: string) {
     this.id = id;
   }
 
   isFull() {
-    return this.players.length === 2;
+    return this.players.size === 2;
+  }
+
+  addPlayer(player: Player) {
+    if (this.isFull()) {
+      throw new GamePlayersError();
+    }
+    this.players.set(player.user.id, player);
+  }
+
+  removePlayer(player: Player) {
+    this.players.delete(player);
+  }
+
+  hasPlayer(player: Player) {
+    return this.players.has(player);
+  }
+
+  getPlayers() {
+    return Array.from(this.players.values());
   }
 
   buildGame(): Game {
     if (!this.isFull()) {
       throw new GamePlayersError();
     }
-    return new Game(this.id, this.players);
+    return new Game(this.getPlayers());
   }
 }

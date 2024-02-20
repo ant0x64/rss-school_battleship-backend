@@ -43,7 +43,7 @@ export default class App extends EventEmitter {
         Array.from(this._players, ([, player]) => player.ws),
         Array.from(this._rooms, ([, room]) => ({
           roomId: room.id,
-          roomUsers: room.players.map((p) => ({
+          roomUsers: room.getPlayers().map((p) => ({
             name: p.user.name,
             index: p.user.id,
           })),
@@ -76,15 +76,18 @@ export default class App extends EventEmitter {
 
   protected addPlayerToRoom(player: Player, room_id: string) {
     const room = this.getRoom(room_id);
-    if (!room || room.players.some((p) => p === player)) {
+    if (!room || room.hasPlayer(player)) {
       return;
     }
 
-    room.players.push(player);
+    room.addPlayer(player);
     if (room.isFull()) {
       const game = room.buildGame();
-      this._games.set(room_id, game);
-      this._rooms.delete(room_id);
+      this._games.set(game.id, game);
+
+      game.getPlayers().map((p) => {
+        this._rooms.delete(p.user.id);
+      });
 
       game.once(GameEvents.FINISHED, () => {
         this._games.delete(game.id);
@@ -200,6 +203,14 @@ export default class App extends EventEmitter {
           throw new AppError();
         }
         game.atack(player, request.data.x as number, request.data.y as number);
+        break;
+      }
+      case RequestTypes.GAME_RANDOM_ATACK: {
+        const game = this.getGame(request.data.gameId as string);
+        if (!game) {
+          throw new AppError();
+        }
+        game.autoAtack(player);
         break;
       }
     }
