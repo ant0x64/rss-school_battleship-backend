@@ -2,13 +2,14 @@ import EventEmitter from 'node:events';
 import Messenger, {
   RequestTypes,
   ResponceTypes,
-  WebSocketPlayer,
+  WebSocket,
   MessageBodyError,
 } from './services/messenger';
 import Database from './services/db.service';
 
 import User, { createUserModel } from './models/user';
 import Player from './models/player';
+import Bot from './models/bot';
 import Room from './models/room';
 import Game, { GameEvents } from './models/game';
 
@@ -74,6 +75,14 @@ export default class App extends EventEmitter {
     return room;
   }
 
+  protected removeRoom(player: Player): boolean {
+    if (this._rooms.delete(player.user.id)) {
+      this.emit(AppEvents.ROOMS);
+      return true;
+    }
+    return false;
+  }
+
   protected addPlayerToRoom(player: Player, room_id: string) {
     const room = this.getRoom(room_id);
     if (!room || room.hasPlayer(player)) {
@@ -86,6 +95,9 @@ export default class App extends EventEmitter {
       this._games.set(game.id, game);
 
       game.getPlayers().map((p) => {
+        if (p instanceof Bot) {
+          p.setGame(game);
+        }
         this._rooms.delete(p.user.id);
       });
 
@@ -98,11 +110,7 @@ export default class App extends EventEmitter {
     this.emit(AppEvents.ROOMS);
   }
 
-  protected authUser(
-    ws: WebSocketPlayer,
-    name?: string,
-    password?: string,
-  ): Player {
+  protected authUser(ws: WebSocket, name?: string, password?: string): Player {
     const user = (this._database
       .getTable('user')
       .all()
@@ -122,7 +130,6 @@ export default class App extends EventEmitter {
     }
 
     const player = new Player(user, ws);
-    ws.player = player;
     this._players.set(user.id, player);
     ws.on('close', () => {
       this._players.delete(user.id);
@@ -136,18 +143,20 @@ export default class App extends EventEmitter {
     return this._players.get(user.id) as Player;
   }
 
-  authUserByCookie(ws: WebSocketPlayer, cookie: string) {
+  authUserByCookie(ws: WebSocket, cookie: string) {
     ws;
     return cookie ? undefined : undefined;
   }
 
-  handleMessage(ws: WebSocketPlayer, message: string) {
-    const request = Messenger.parseRequest(message);
+  handleMessage(ws: WebSocket, message: string) {
+    const request = Messenger.parseMessage(message);
     if (!request) {
       throw new MessageBodyError();
     }
 
-    const player = ws.player;
+    const player = Array.from(this._players.values()).find(
+      (player) => player.ws === ws,
+    );
 
     if (request.type === RequestTypes.REG) {
       if (!player) {
@@ -189,6 +198,12 @@ export default class App extends EventEmitter {
       case RequestTypes.ROOM_PLAYER:
         this.addPlayerToRoom(player, request.data.indexRoom as string);
         break;
+      case RequestTypes.GAME_SINGLE: {
+        const room = this.addRoom(player);
+        this.addPlayerToRoom(player, room.id);
+        this.addPlayerToRoom(new Bot(), room.id);
+        break;
+      }
       case RequestTypes.GAME_SHIPS: {
         const game = this.getGame(request.data.gameId as string);
         if (!game) {

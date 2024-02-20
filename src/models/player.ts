@@ -6,8 +6,9 @@ import Messenger, {
 } from './../services/messenger';
 
 export default class Player {
-  ws: WebSocketPlayer;
-  user: User;
+  readonly ws: WebSocketPlayer;
+  readonly user: User;
+
   wins: number = 0;
 
   constructor(user: User, ws: WebSocketPlayer) {
@@ -16,6 +17,8 @@ export default class Player {
   }
 
   message(type: ResponceTypes, data: object) {
-    Messenger.sendResponce(type, this.ws, data);
+    if (this.ws) {
+      Messenger.sendResponce(type, this.ws, data);
+    }
   }
 }

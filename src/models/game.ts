@@ -1,6 +1,7 @@
 import { ResponceTypes } from './../services/messenger';
 
 import Player from './player';
+import Bot from './bot';
 import { randomUUID, UUID } from 'node:crypto';
 import { EventEmitter } from 'events';
 
@@ -12,7 +13,12 @@ export class GamePlayersError extends GameError {
   }
 }
 
-type AtackPoint = `${number}.${number}`;
+export enum AtackStatus {
+  MISS = 'miss',
+  KILLED = 'killed',
+  SHOT = 'shot',
+  REPEAT = 'repeat',
+}
 
 export type Ship = {
   position: {
@@ -26,31 +32,37 @@ export type Ship = {
   killed: boolean;
 };
 
-export enum AtackStatus {
-  MISS = 'miss',
-  KILLED = 'killed',
-  SHOT = 'shot',
-  REPEAT = 'repeat',
-}
+type AtackPoint = `${number}.${number}`;
 
 class Board {
-  size: number = 10;
+  readonly size = 10;
+  readonly board: { [key: number]: { [key: number]: number } };
+  readonly history: AtackPoint[] = [];
 
-  ships: Ship[];
-  player: Player;
+  readonly ships: Ship[];
+  protected player: Player;
 
-  history: AtackPoint[] = [];
-  shipsKilled: Ship[] = [];
+  protected shipsKilled: Ship[] = [];
 
   constructor(player: Player, ships: Ship[]) {
+    this.board = Array(this.size).fill(Array(this.size).fill(-1));
+
     this.player = player;
-    this.ships = ships.map((ship) => {
+    this.ships = ships.map((ship, index) => {
       ship.health = {};
+
       for (let i = 0; i < ship.length; i++) {
-        const point = ship.direction
-          ? `${ship.position.x}.${ship.position.y + i}`
-          : `${ship.position.x + i}.${ship.position.y}`;
-        ship.health[point as AtackPoint] = true;
+        const x = ship.direction ? ship.position.x : ship.position.x + i;
+        const y = ship.direction ? ship.position.y + i : ship.position.y;
+
+        const row = this.board[x];
+
+        if (!row) {
+          throw new GameError();
+        }
+        row[y] = index;
+
+        ship.health[`${x}.${y}` as AtackPoint] = true;
       }
       return ship;
     });
@@ -66,6 +78,13 @@ class Board {
     if (this.history.includes(point)) {
       return AtackStatus.REPEAT;
     }
+
+    const row = this.board[x];
+
+    if (!row || row[y] === undefined) {
+      throw new GameError();
+    }
+
     this.history.push(point);
 
     for (const [index, ship] of this.ships.entries()) {
@@ -154,6 +173,7 @@ export default class Game extends EventEmitter {
     }
 
     if (player !== this.turn) {
+      this.sendTurn();
       return;
     }
 
@@ -216,6 +236,9 @@ export default class Game extends EventEmitter {
           this.emit(GameEvents.FINISHED);
         }
         break;
+    }
+    if (player instanceof Bot && result === 'killed') {
+      debugger;
     }
     this.sendTurn(result === AtackStatus.MISS);
   }

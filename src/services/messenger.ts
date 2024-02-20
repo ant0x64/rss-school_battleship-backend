@@ -1,5 +1,4 @@
-import { WebSocket } from 'ws';
-import Player from './../models/player';
+import { WebSocket as WsWebSocket } from 'ws';
 
 export enum RequestTypes {
   REG = 'reg',
@@ -8,6 +7,7 @@ export enum RequestTypes {
   GAME_SHIPS = 'add_ships',
   GAME_ATACK = 'attack',
   GAME_RANDOM_ATACK = 'randomAttack',
+  GAME_SINGLE = 'single_play',
 }
 
 export enum ResponceTypes {
@@ -21,8 +21,8 @@ export enum ResponceTypes {
   WINNERS = 'update_winners',
 }
 
-export type Request = {
-  type: RequestTypes;
+export type Message = {
+  type: RequestTypes | ResponceTypes;
   data: { [key: string]: object | string | number | boolean };
 };
 
@@ -31,24 +31,20 @@ export type Responce = {
   data: string;
 };
 
-export type WebSocketPlayer = WebSocket & {
-  player?: Player;
-};
+export type WebSocket = WsWebSocket;
+export type BotSocket = Pick<WebSocket, 'send'>;
+export type WebSocketPlayer = WebSocket | BotSocket;
 
 export class MessageError extends Error {}
 export class MessageBodyError extends MessageError {}
 
 export default class Messenger {
-  static parseRequest(message: string = ''): Request | null {
+  static parseMessage(message: string = ''): Message | null {
     try {
       const request = JSON.parse(message);
       request.data = request.data ? JSON.parse(request.data) : undefined;
 
-      if (!Object.values(RequestTypes).includes(request.type)) {
-        return null;
-      }
-
-      return request as Request;
+      return request as Message;
     } catch {}
 
     return null;
@@ -71,9 +67,4 @@ export default class Messenger {
       ws.send(JSON.stringify(responce));
     });
   }
-
-  // static sendWinners(
-  //   recipient: WebSocketPlayer | WebSocketPlayer[],
-  //   players: Player[],
-  // ) {}
 }
