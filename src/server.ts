@@ -35,7 +35,7 @@ config();
 const app = new App();
 
 const port: number =
-  process.env.SERVER_PORT && isNaN(parseInt(process.env.SERVER_PORT))
+  process.env.SERVER_PORT && !isNaN(parseInt(process.env.SERVER_PORT))
     ? parseInt(process.env.SERVER_PORT)
     : 3000;
 
