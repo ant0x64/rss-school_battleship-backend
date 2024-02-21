@@ -4,75 +4,228 @@ import Player from './player';
 import { randomUUID, UUID } from 'node:crypto';
 import { EventEmitter } from 'events';
 
-export class GameError extends Error {}
+type Point = `${number}.${number}`;
 
-export class GamePlayersError extends GameError {
-  constructor(message: string = 'The game must have 2 players') {
-    super(message);
-  }
-}
-
-export enum AtackStatus {
-  MISS = 'miss',
-  KILLED = 'killed',
-  SHOT = 'shot',
-  REPEAT = 'repeat',
-}
-
-export type Ship = {
+type ShipType = 'small' | 'medium' | 'large' | 'huge';
+type ShipHealth = { [key: Point]: boolean };
+type Ship = {
   position: {
     x: number;
     y: number;
   };
   direction: boolean;
   length: number;
-  type: 'small' | 'medium' | 'large' | 'huge';
-  health: { [key: AtackPoint]: boolean };
+  type: ShipType;
+  health: ShipHealth;
   killed: boolean;
 };
 
-type AtackPoint = `${number}.${number}`;
+enum AtackStatus {
+  MISS = 'miss',
+  KILLED = 'killed',
+  SHOT = 'shot',
+  REPEAT = 'repeat',
+}
 
-class Board {
+export enum GameEvents {
+  START = 'start',
+  FINISHED = 'finished',
+}
+
+export class GameError extends Error {}
+export class GamePlayersError extends GameError {
+  constructor(message: string = 'The game must have 2 players') {
+    super(message);
+  }
+}
+
+export class Board {
   readonly size = 10;
   readonly board: { [key: number]: { [key: number]: number } };
-  readonly history: AtackPoint[] = [];
+  readonly history: Point[] = [];
+
+  readonly shipsConfigurationMap: {
+    [key in ShipType]: { length: number; count: number };
+  } = {
+    huge: {
+      length: 4,
+      count: 1,
+    },
+    large: {
+      length: 3,
+      count: 2,
+    },
+    medium: {
+      length: 2,
+      count: 3,
+    },
+    small: {
+      length: 1,
+      count: 4,
+    },
+  };
 
   readonly ships: Ship[];
   protected player: Player;
 
   protected shipsKilled: Ship[] = [];
 
-  constructor(player: Player, ships: Ship[]) {
+  constructor(player: Player, ships: Ship[] | undefined) {
     this.board = Array(this.size).fill(Array(this.size).fill(-1));
 
     this.player = player;
-    this.ships = ships.map((ship, index) => {
-      ship.health = {};
+    this.ships = (ships || this.generateShips()).map((ship, index) => {
+      const points = this.getShipPoints(ship);
 
-      for (let i = 0; i < ship.length; i++) {
-        const x = ship.direction ? ship.position.x : ship.position.x + i;
-        const y = ship.direction ? ship.position.y + i : ship.position.y;
-
+      ship.health = points.reduce((health, point) => {
+        const [x, y] = <[number, number]>(
+          point.split('.').map((p) => parseInt(p))
+        );
         const row = this.board[x];
 
         if (!row) {
-          throw new GameError();
+          throw new GameError("Ship doesn't fit the board");
         }
         row[y] = index;
 
-        ship.health[`${x}.${y}` as AtackPoint] = true;
-      }
+        health[point] = true;
+        return health;
+      }, {} as ShipHealth);
       return ship;
     });
   }
 
-  getKilledShips() {
-    return [...this.shipsKilled];
+  protected generateShips(): Ship[] {
+    const result: Ship[] = [];
+    let points = this.getAvailablePoints();
+
+    for (const [type, conf] of Object.entries(this.shipsConfigurationMap)) {
+      let count = conf.count;
+      while (count) {
+        let direction = Math.random() > 0.5;
+        const randomPoint =
+          this.getRandomPoint(points, conf.length, direction) ||
+          this.getRandomPoint(points, conf.length, (direction = !direction));
+
+        if (!randomPoint) {
+          throw new GameError('No available points');
+        }
+
+        const [x, y] = <[number, number]>(
+          randomPoint.split('.').map((p) => parseInt(p))
+        );
+
+        const ship = {
+          type,
+          direction,
+          length: conf.length,
+          position: {
+            x,
+            y,
+          },
+        } as Ship;
+        const shipPoints = this.getShipPoints(ship);
+        const pointsAround = this.getPointsAround(ship);
+
+        points = points.filter(
+          (p) => !shipPoints.includes(p) && !pointsAround.includes(p),
+        );
+
+        result.push(ship);
+        count--;
+      }
+    }
+    return result;
+  }
+
+  getAvailablePoints() {
+    const result: Point[] = [];
+    for (let x = 0; x < this.size; x++) {
+      for (let y = 0; y < this.size; y++) {
+        const cell = `${x}.${y}` as Point;
+        if (!this.history.includes(cell)) {
+          result.push(`${x}.${y}` as Point);
+        }
+      }
+    }
+    return result;
+  }
+
+  getRandomPoint(points: Point[], length = 1, direction = false) {
+    const pointSet = new Set(points);
+
+    for (const point of points) {
+      const [x, y] = <[number, number]>point.split('.').map((p) => parseInt(p));
+      if (!direction) {
+        // if horizontal
+        for (let xl = x; xl < x + length; xl++) {
+          if (!pointSet.has(`${xl}.${y}` as Point)) {
+            pointSet.delete(point);
+            break;
+          }
+        }
+      } else {
+        // if vertical
+        for (let yl = y; yl < y + length; yl++) {
+          if (!pointSet.has(`${x}.${yl}` as Point)) {
+            pointSet.delete(point);
+            break;
+          }
+        }
+      }
+    }
+
+    return Array.from(pointSet)[
+      Math.floor(Math.random() * (pointSet.size - 0.1))
+    ];
+  }
+
+  getShipPoints(ship: Ship): Point[] {
+    const result: Point[] = [];
+
+    for (let i = 0; i < ship.length; i++) {
+      const x = ship.direction ? ship.position.x : ship.position.x + i;
+      const y = ship.direction ? ship.position.y + i : ship.position.y;
+      result.push(`${x}.${y}` as Point);
+    }
+    return result;
+  }
+
+  getPointsAround(ship: Ship): Point[] {
+    const result: Point[] = [];
+
+    const from_x = ship.position.x - 1;
+    const from_y = ship.position.y - 1;
+
+    const to_x = ship.direction
+      ? ship.position.x + 1
+      : ship.position.x + ship.length;
+    const to_y = ship.direction
+      ? ship.position.y + ship.length
+      : ship.position.y + 1;
+
+    for (let x = Math.max(0, from_x); x <= Math.min(this.size - 1, to_x); x++) {
+      if (from_y >= 0) result.push(`${x}.${from_y}`);
+      if (to_y < this.size) result.push(`${x}.${to_y}`);
+    }
+
+    for (let y = from_y + 1; y <= to_y - 1; y++) {
+      if (y < 0 || y >= this.size) {
+        continue;
+      }
+      if (from_x >= 0) result.push(`${from_x}.${y}`);
+      if (to_x < this.size) result.push(`${to_x}.${y}`);
+    }
+
+    return result;
+  }
+
+  getLastKilled() {
+    return [...this.shipsKilled]?.pop();
   }
 
   atack(x: number, y: number): AtackStatus {
-    const point = `${x}.${y}` as AtackPoint;
+    const point = `${x}.${y}` as Point;
 
     if (this.history.includes(point)) {
       return AtackStatus.REPEAT;
@@ -92,6 +245,7 @@ class Board {
         if (!Object.values(ship.health).length) {
           delete this.ships[index];
           this.shipsKilled.push(ship);
+          this.history.push(...this.getPointsAround(ship));
 
           return AtackStatus.KILLED;
         }
@@ -100,11 +254,6 @@ class Board {
     }
     return AtackStatus.MISS;
   }
-}
-
-export enum GameEvents {
-  START = 'start',
-  FINISHED = 'finished',
 }
 
 export default class Game extends EventEmitter {
@@ -221,65 +370,48 @@ export default class Game extends EventEmitter {
       });
     });
 
-    switch (result) {
-      case AtackStatus.KILLED:
-        const ship = board.getKilledShips()?.pop();
-        if (ship) {
-          // send cells around (WHY BACKEND?...)
-          const from_x = Math.max(ship.position.x - 1, 0);
-          const from_y = Math.max(ship.position.y - 1, 0);
-
-          const to_x = Math.min(
-            board.size - 1,
-            ship.direction
-              ? ship.position.x + 1
-              : ship.position.x + ship.length,
+    if (result === AtackStatus.KILLED) {
+      const ship = board.getLastKilled();
+      if (ship) {
+        const pointsAround = board.getPointsAround(ship);
+        pointsAround.map((point) => {
+          // WHY BACKEND ..
+          const [x, y] = <[number, number]>(
+            point.split('.').map((p) => parseInt(p))
           );
-          const to_y = Math.min(
-            board.size - 1,
-            ship.direction
-              ? ship.position.y + ship.length
-              : ship.position.y + 1,
-          );
-
-          for (let x = from_x; x <= to_x; x++) {
-            for (let y = from_y; y <= to_y; y++) {
-              if (board.atack(x, y) === AtackStatus.MISS) {
-                console.log('Empty cell', {
-                  game_id: this.id,
-                  current_player: player.user.id,
-                  point: `${x}.${y}`,
-                });
-                this.players.map((p) => {
-                  p.message(ResponceTypes.GAME_ATACK, {
-                    position: {
-                      x: x,
-                      y: y,
-                    },
-                    currentPlayer: player.user.id,
-                    status: AtackStatus.MISS,
-                  });
-                });
-              }
-            }
-          }
-        }
-
-        if (!Object.keys(board.ships).length) {
-          player.wins++;
-          console.log('Game finished', {
+          console.log('Send empty cell', {
             game_id: this.id,
+            current_player: player.user.id,
+            point: `${x}.${y}`,
           });
           this.players.map((p) => {
-            p.message(ResponceTypes.GAME_FINISH, {
-              winPlayer: player.user.id,
+            p.message(ResponceTypes.GAME_ATACK, {
+              position: {
+                x: x,
+                y: y,
+              },
+              currentPlayer: player.user.id,
+              status: AtackStatus.MISS,
             });
           });
-          this.emit(GameEvents.FINISHED);
-          return;
-        }
-        break;
+        });
+      }
+
+      if (!Object.keys(board.ships).length) {
+        player.wins++;
+        console.log('Game finished', {
+          game_id: this.id,
+        });
+        this.players.map((p) => {
+          p.message(ResponceTypes.GAME_FINISH, {
+            winPlayer: player.user.id,
+          });
+        });
+        this.emit(GameEvents.FINISHED);
+        return;
+      }
     }
+
     this.sendTurn(result === AtackStatus.MISS);
   }
 
@@ -291,35 +423,24 @@ export default class Game extends EventEmitter {
       throw new GameError('Board not found');
     }
 
-    const availableCells: AtackPoint[] = [];
-    for (let x = 0; x < board.size; x++) {
-      for (let y = 0; y < board.size; y++) {
-        const cell = `${x}.${y}` as AtackPoint;
-        if (!board.history.includes(cell)) {
-          availableCells.push(`${x}.${y}` as AtackPoint);
-        }
-      }
-    }
+    const availablePoints = board.getAvailablePoints();
+    const randomPoint = board.getRandomPoint(availablePoints);
 
-    if (!availableCells.length) {
+    if (!availablePoints.length || !randomPoint) {
       throw new GameError('There are no available atack points');
     }
-    const [x, y] = <[string, string]>(
-      (
-        availableCells[
-          Math.floor(Math.random() * (availableCells.length - 0.1))
-        ] as AtackPoint
-      ).split('.')
+    const [x, y] = <[number, number]>(
+      randomPoint.split('.').map((p) => parseInt(p))
     );
 
-    return this.atack(player, parseInt(x), parseInt(y));
+    return this.atack(player, x, y);
   }
 
   getBoard(player: Player) {
     return this.boards.get(player.user.id);
   }
 
-  addBoard(player: Player, ships: Ship[] | object) {
+  addBoard(player: Player, ships?: object) {
     let board = this.getBoard(player);
 
     if (!board) {

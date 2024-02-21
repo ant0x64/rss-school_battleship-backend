@@ -210,7 +210,12 @@ export default class App extends EventEmitter {
         if (!game) {
           throw new AppError();
         }
-        game.addBoard(player, request.data.ships as object);
+        game.addBoard(
+          player,
+          typeof request.data.ships === 'object'
+            ? request.data.ships
+            : undefined,
+        );
         break;
       }
       case RequestTypes.GAME_ATACK: {
