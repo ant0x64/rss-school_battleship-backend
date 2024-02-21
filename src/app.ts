@@ -193,7 +193,8 @@ export default class App extends EventEmitter {
 
     switch (request.type) {
       case RequestTypes.ROOM_CREATE:
-        this.addRoom(player);
+        const room = this.addRoom(player);
+        this.addPlayerToRoom(player, room.id);
         break;
       case RequestTypes.ROOM_PLAYER:
         this.addPlayerToRoom(player, request.data.indexRoom as string);

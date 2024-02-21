@@ -49,6 +49,8 @@ server.on('connection', (ws: WebSocket, req) => {
   ws.on('message', (message) => {
     try {
       app.handleMessage(ws, message.toString());
-    } catch {}
+    } catch (err) {
+      console.error(err);
+    }
   });
 });

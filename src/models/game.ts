@@ -1,7 +1,6 @@
 import { ResponceTypes } from './../services/messenger';
 
 import Player from './player';
-import Bot from './bot';
 import { randomUUID, UUID } from 'node:crypto';
 import { EventEmitter } from 'events';
 
@@ -82,7 +81,7 @@ class Board {
     const row = this.board[x];
 
     if (!row || row[y] === undefined) {
-      throw new GameError();
+      throw new GameError('Outside the field');
     }
 
     this.history.push(point);
@@ -133,6 +132,10 @@ export default class Game extends EventEmitter {
         });
       });
       this.started = true;
+      console.log('Game started', {
+        game_id: this.id,
+        players: this.players.map((p) => p.user.id),
+      });
       this.sendTurn();
     });
 
@@ -141,6 +144,11 @@ export default class Game extends EventEmitter {
         idGame: this.id,
         idPlayer: player.user.id,
       });
+    });
+
+    console.log('Game created', {
+      game_id: this.id,
+      players: this.players.map((p) => p.user.id),
     });
   }
 
@@ -155,9 +163,23 @@ export default class Game extends EventEmitter {
   protected sendTurn(to_switch: boolean = true) {
     const opponent = this.getOpponent(this.turn);
     if (to_switch) {
+      console.log('Turn switch', {
+        game_id: this.id,
+        current_player: this.turn.user.id,
+      });
       this.turn = opponent;
     }
 
+    /** @test bot auto atack testing purpose */
+    // const bot = this.players.find((p) => p instanceof Bot);
+    // if (bot) {
+    //   this.turn = bot;
+    // }
+
+    console.log('Turn sends', {
+      game_id: this.id,
+      current_player: this.turn.user.id,
+    });
     this.players.map((player) => {
       player.message(ResponceTypes.GAME_TURN, {
         currentPlayer: this.turn.user.id,
@@ -169,15 +191,21 @@ export default class Game extends EventEmitter {
     const opponent = this.getOpponent(player);
     const board = this.getBoard(opponent);
     if (!board) {
-      throw new GameError();
+      throw new GameError('Board not found');
     }
 
     if (player !== this.turn) {
-      this.sendTurn();
+      this.sendTurn(false);
       return;
     }
 
     const result = board.atack(x, y);
+    console.log('Atack', {
+      game_id: this.id,
+      current_player: player.user.id,
+      point: `${x}.${y}`,
+      result,
+    });
     if (result === AtackStatus.REPEAT) {
       return;
     }
@@ -201,16 +229,27 @@ export default class Game extends EventEmitter {
           const from_x = Math.max(ship.position.x - 1, 0);
           const from_y = Math.max(ship.position.y - 1, 0);
 
-          const to_x = ship.direction
-            ? ship.position.x + 1
-            : ship.position.x + ship.length;
-          const to_y = ship.direction
-            ? ship.position.y + ship.length
-            : ship.position.y + 1;
+          const to_x = Math.min(
+            board.size - 1,
+            ship.direction
+              ? ship.position.x + 1
+              : ship.position.x + ship.length,
+          );
+          const to_y = Math.min(
+            board.size - 1,
+            ship.direction
+              ? ship.position.y + ship.length
+              : ship.position.y + 1,
+          );
 
           for (let x = from_x; x <= to_x; x++) {
             for (let y = from_y; y <= to_y; y++) {
               if (board.atack(x, y) === AtackStatus.MISS) {
+                console.log('Empty cell', {
+                  game_id: this.id,
+                  current_player: player.user.id,
+                  point: `${x}.${y}`,
+                });
                 this.players.map((p) => {
                   p.message(ResponceTypes.GAME_ATACK, {
                     position: {
@@ -228,17 +267,18 @@ export default class Game extends EventEmitter {
 
         if (!Object.keys(board.ships).length) {
           player.wins++;
+          console.log('Game finished', {
+            game_id: this.id,
+          });
           this.players.map((p) => {
             p.message(ResponceTypes.GAME_FINISH, {
               winPlayer: player.user.id,
             });
           });
           this.emit(GameEvents.FINISHED);
+          return;
         }
         break;
-    }
-    if (player instanceof Bot && result === 'killed') {
-      debugger;
     }
     this.sendTurn(result === AtackStatus.MISS);
   }
@@ -248,7 +288,7 @@ export default class Game extends EventEmitter {
     const opponent = this.getOpponent(player);
     const board = this.getBoard(opponent);
     if (!board) {
-      throw new GameError();
+      throw new GameError('Board not found');
     }
 
     const availableCells: AtackPoint[] = [];
@@ -262,12 +302,12 @@ export default class Game extends EventEmitter {
     }
 
     if (!availableCells.length) {
-      throw new GameError();
+      throw new GameError('There are no available atack points');
     }
     const [x, y] = <[string, string]>(
       (
         availableCells[
-          Math.floor(Math.random() * availableCells.length)
+          Math.floor(Math.random() * (availableCells.length - 0.1))
         ] as AtackPoint
       ).split('.')
     );

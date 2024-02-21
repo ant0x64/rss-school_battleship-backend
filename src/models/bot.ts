@@ -23,11 +23,13 @@ export default class Bot extends Player {
           responce?.type === ResponceTypes.GAME_TURN &&
           responce.data.currentPlayer === user.id
         ) {
+          console.log(`Bot with id:${this.user.id} atacks`);
           this.game?.autoAtack(this);
         }
       },
     };
     super(user, ws);
+    console.log(`Bot with id:${this.user.id} created`);
   }
 
   setGame(game: Game) {
