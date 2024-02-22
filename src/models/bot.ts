@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import User from './user';
 import Player from './player';
-import Game from './game';
+import Game, { GameError } from './game';
 
 import Messenger, { BotSocket, ResponceTypes } from './../services/messenger';
 
@@ -23,6 +23,9 @@ export default class Bot extends Player {
           responce?.type === ResponceTypes.GAME_TURN &&
           responce.data.currentPlayer === user.id
         ) {
+          if (!this.game) {
+            throw new GameError('Game not specified');
+          }
           console.log(`Bot with id:${this.user.id} atacks`);
           this.game?.autoAtack(this);
         }
@@ -33,7 +36,7 @@ export default class Bot extends Player {
   }
 
   setGame(game: Game) {
-    this.game = game;
     game.addBoard(this);
+    this.game = game;
   }
 }

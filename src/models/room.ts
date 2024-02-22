@@ -1,11 +1,12 @@
+import { ModelId } from './abstract';
 import Player from './player';
 import Game, { GamePlayersError } from './game';
 
 export default class Room {
   protected players: Map<any, Player> = new Map();
-  readonly id: string;
+  readonly id: ModelId;
 
-  constructor(id: string) {
+  constructor(id: ModelId) {
     this.id = id;
   }
 

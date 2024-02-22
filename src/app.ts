@@ -7,6 +7,7 @@ import Messenger, {
 } from './services/messenger';
 import Database from './services/db.service';
 
+import { ModelId } from './models/abstract';
 import User, { createUserModel } from './models/user';
 import Player from './models/player';
 import Bot from './models/bot';
@@ -22,9 +23,9 @@ export class AppError extends Error {}
 
 export default class App extends EventEmitter {
   private _database: Database = new Database();
-  private _players: Map<any, Player> = new Map<any, Player>();
-  private _rooms: Map<any, Room> = new Map<any, Room>();
-  private _games: Map<any, Game> = new Map<any, Game>();
+  private _players: Map<ModelId, Player> = new Map<ModelId, Player>();
+  private _rooms: Map<ModelId, Room> = new Map<ModelId, Room>();
+  private _games: Map<ModelId, Game> = new Map<ModelId, Game>();
 
   constructor() {
     super();
@@ -53,15 +54,15 @@ export default class App extends EventEmitter {
     });
   }
 
-  protected getPlayer(id: string) {
+  protected getPlayer(id: ModelId) {
     return this._players.get(id);
   }
 
-  protected getRoom(id: string) {
+  protected getRoom(id: ModelId) {
     return this._rooms.get(id);
   }
 
-  protected getGame(id: string) {
+  protected getGame(id: ModelId) {
     return this._games.get(id);
   }
 
@@ -83,7 +84,7 @@ export default class App extends EventEmitter {
     return false;
   }
 
-  protected addPlayerToRoom(player: Player, room_id: string) {
+  protected addPlayerToRoom(player: Player, room_id: ModelId) {
     const room = this.getRoom(room_id);
     if (!room || room.hasPlayer(player)) {
       return;
@@ -197,7 +198,7 @@ export default class App extends EventEmitter {
         this.addPlayerToRoom(player, room.id);
         break;
       case RequestTypes.ROOM_PLAYER:
-        this.addPlayerToRoom(player, request.data.indexRoom as string);
+        this.addPlayerToRoom(player, request.data.indexRoom as ModelId);
         break;
       case RequestTypes.GAME_SINGLE: {
         const room = this.addRoom(player);
@@ -206,7 +207,7 @@ export default class App extends EventEmitter {
         break;
       }
       case RequestTypes.GAME_SHIPS: {
-        const game = this.getGame(request.data.gameId as string);
+        const game = this.getGame(request.data.gameId as ModelId);
         if (!game) {
           throw new AppError();
         }
@@ -219,7 +220,7 @@ export default class App extends EventEmitter {
         break;
       }
       case RequestTypes.GAME_ATACK: {
-        const game = this.getGame(request.data.gameId as string);
+        const game = this.getGame(request.data.gameId as ModelId);
         if (!game) {
           throw new AppError();
         }
@@ -227,7 +228,7 @@ export default class App extends EventEmitter {
         break;
       }
       case RequestTypes.GAME_RANDOM_ATACK: {
-        const game = this.getGame(request.data.gameId as string);
+        const game = this.getGame(request.data.gameId as ModelId);
         if (!game) {
           throw new AppError();
         }

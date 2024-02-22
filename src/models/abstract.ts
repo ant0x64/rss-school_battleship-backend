@@ -1,5 +1,7 @@
 import { TableRow } from './../services/db.service';
 
+export type ModelId = TableRow['id'];
+
 export default interface DatabaseModel extends TableRow {}
 
 export class ModelErrorFields extends Error {
