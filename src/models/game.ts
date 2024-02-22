@@ -371,6 +371,7 @@ export default class Game extends EventEmitter {
       result,
     });
     if (result === AtackResult.REPEAT) {
+      this.sendTurn(false);
       return;
     }
 
@@ -400,8 +401,26 @@ export default class Game extends EventEmitter {
         return;
       } else if (board.lastKilled) {
         // WHY BACKEND ..
-        const pointsAround = board.getPointsAround(board.lastKilled);
-        pointsAround.map(([x, y]) => {
+        const shipCoords = board.getShipCoordinates(board.lastKilled);
+        const coordsAround = board.getPointsAround(board.lastKilled);
+        shipCoords.map(([x, y]) => {
+          console.log('Game: send killed cells', {
+            game_id: this.id,
+            current_player: player.user.id,
+            coordinates: [x, y],
+          });
+          this.players.map((p) => {
+            p.message(ResponceTypes.GAME_ATACK, {
+              position: {
+                x: x,
+                y: y,
+              },
+              currentPlayer: player.user.id,
+              status: AtackResult.KILLED,
+            });
+          });
+        });
+        coordsAround.map(([x, y]) => {
           console.log('Game: send empty cell', {
             game_id: this.id,
             current_player: player.user.id,
@@ -449,12 +468,11 @@ export default class Game extends EventEmitter {
   }
 
   addBoard(player: Player, ships?: object) {
-    let board = this.getBoard(player);
-
-    if (!board) {
-      board = new Board(player, ships as Ship[]);
+    if (this.boards.get(player.user.id)) {
+      throw new GameError('Board already exists');
     }
 
+    const board = new Board(player, ships as Ship[]);
     this.boards.set(player.user.id, board);
 
     if (this.boards.size === 2) {
