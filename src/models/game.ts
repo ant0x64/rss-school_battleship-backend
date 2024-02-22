@@ -1,11 +1,24 @@
-import { ResponceTypes } from './../services/messenger';
+import { ResponceTypes } from '../services/messenger';
 
-import { ModelId } from './abstract';
+import { ModelId, randomModelId } from './abstract';
 import Player from './player';
-import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
-type Coordinate = [number, number];
+export class GameError extends Error {}
+export class GamePlayersError extends GameError {
+  constructor(message: string = 'The game must have 2 players') {
+    super(message);
+  }
+}
+
+type Coordinate = readonly [number, number];
+
+enum AtackResult {
+  MISS = 'miss',
+  KILLED = 'killed',
+  SHOT = 'shot',
+  REPEAT = 'repeat',
+}
 
 enum ShipType {
   'small' = 1,
@@ -14,37 +27,19 @@ enum ShipType {
   'huge' = 4,
 }
 type Ship = {
-  position: {
+  readonly position: {
     x: number;
     y: number;
   };
-  direction: boolean;
-  length: number;
-  type: keyof typeof ShipType;
+  readonly direction: boolean;
+  readonly length: number;
+  readonly type: keyof typeof ShipType;
   index: number;
 };
 
-enum AtackResult {
-  MISS = 'miss',
-  KILLED = 'killed',
-  SHOT = 'shot',
-  REPEAT = 'repeat',
-}
 enum BoardCellStatus {
   NOT_AVAILABLE = -1,
   AVAILABLE = Number.NEGATIVE_INFINITY,
-}
-
-export enum GameEvents {
-  START = 'start',
-  FINISHED = 'finished',
-}
-
-export class GameError extends Error {}
-export class GamePlayersError extends GameError {
-  constructor(message: string = 'The game must have 2 players') {
-    super(message);
-  }
 }
 
 export class Board {
@@ -107,7 +102,7 @@ export class Board {
     );
   }
 
-  protected generateShips(): Ship[] {
+  generateShips(): Ship[] {
     const result: Ship[] = [];
     let coordinates = this.getAvailableCoordinates();
 
@@ -282,9 +277,14 @@ export class Board {
   }
 }
 
+export enum GameEvents {
+  START = 'start',
+  FINISHED = 'finished',
+}
+
 export default class Game extends EventEmitter {
   readonly id: ModelId;
-  protected players: Player[];
+  readonly players: Player[];
 
   protected boards: Map<Player['user']['id'], Board> = new Map();
   protected turn: Player;
@@ -294,18 +294,18 @@ export default class Game extends EventEmitter {
     if (players.length !== 2) {
       throw new GamePlayersError();
     }
-    this.id = randomUUID();
+    this.id = randomModelId();
     this.turn = players[0] as Player;
     this.players = players;
 
     this.on(GameEvents.START, () => {
       this.players.map((player) => {
         player.message(ResponceTypes.GAME_START, {
-          ships: this.getBoard(player)?.ships,
+          ships: this.getBoard(player).ships,
           currentPlayerIndex: player.user.id,
         });
       });
-      console.log('Game started', {
+      console.log('Game: started', {
         game_id: this.id,
         players: this.players.map((p) => p.user.id),
       });
@@ -319,7 +319,7 @@ export default class Game extends EventEmitter {
       });
     });
 
-    console.log('Game created', {
+    console.log('Game: created', {
       game_id: this.id,
       players: this.players.map((p) => p.user.id),
     });
@@ -336,14 +336,14 @@ export default class Game extends EventEmitter {
   protected sendTurn(to_switch: boolean = true) {
     const opponent = this.getOpponent(this.turn);
     if (to_switch) {
-      console.log('Turn switch', {
+      console.log('Game: turn switch', {
         game_id: this.id,
         current_player: this.turn.user.id,
       });
       this.turn = opponent;
     }
 
-    console.log('Turn sends', {
+    console.log('Game: turn sends', {
       game_id: this.id,
       current_player: this.turn.user.id,
     });
@@ -357,17 +357,14 @@ export default class Game extends EventEmitter {
   atack(player: Player, x: number, y: number) {
     const opponent = this.getOpponent(player);
     const board = this.getBoard(opponent);
-    if (!board) {
-      throw new GameError('Board not found');
-    }
 
     if (player !== this.turn) {
-      this.sendTurn(false);
+      this.sendTurn(false); // again
       return;
     }
 
     const result = board.atack(x, y);
-    console.log('Atack', {
+    console.log('Game: atack', {
       game_id: this.id,
       current_player: player.user.id,
       coordinates: [x, y],
@@ -389,11 +386,23 @@ export default class Game extends EventEmitter {
     });
 
     if (result === AtackResult.KILLED) {
-      if (board.lastKilled) {
+      if (!board.hasAvailableShips()) {
+        player.wins++;
+        console.log('Game: finished', {
+          game_id: this.id,
+        });
+        this.players.map((p) => {
+          p.message(ResponceTypes.GAME_FINISH, {
+            winPlayer: player.user.id,
+          });
+        });
+        this.emit(GameEvents.FINISHED);
+        return;
+      } else if (board.lastKilled) {
         // WHY BACKEND ..
         const pointsAround = board.getPointsAround(board.lastKilled);
         pointsAround.map(([x, y]) => {
-          console.log('Send empty cell', {
+          console.log('Game: send empty cell', {
             game_id: this.id,
             current_player: player.user.id,
             coordinates: [x, y],
@@ -410,20 +419,6 @@ export default class Game extends EventEmitter {
           });
         });
       }
-
-      if (!board.hasAvailableShips()) {
-        player.wins++;
-        console.log('Game finished', {
-          game_id: this.id,
-        });
-        this.players.map((p) => {
-          p.message(ResponceTypes.GAME_FINISH, {
-            winPlayer: player.user.id,
-          });
-        });
-        this.emit(GameEvents.FINISHED);
-        return;
-      }
     }
 
     this.sendTurn(result === AtackResult.MISS);
@@ -433,9 +428,6 @@ export default class Game extends EventEmitter {
     // WHY BACKEND?..
     const opponent = this.getOpponent(player);
     const board = this.getBoard(opponent);
-    if (!board) {
-      throw new GameError('Board not found');
-    }
 
     const availablePoints = board.getAvailableCoordinates();
     const coordinate = board.getRandomCoordinate(availablePoints);
@@ -449,7 +441,11 @@ export default class Game extends EventEmitter {
   }
 
   getBoard(player: Player) {
-    return this.boards.get(player.user.id);
+    const board = this.boards.get(player.user.id);
+    if (!board) {
+      throw new GameError('Board not found');
+    }
+    return board;
   }
 
   addBoard(player: Player, ships?: object) {
@@ -466,9 +462,5 @@ export default class Game extends EventEmitter {
     }
 
     return board;
-  }
-
-  getPlayers() {
-    return Array.from(this.players);
   }
 }

@@ -1,41 +1,48 @@
 import { UUID, randomUUID } from 'node:crypto';
 
+export type EntityID = UUID;
+export const randomEntityID = (): EntityID => {
+  return randomUUID();
+};
+
 export interface TableRow {
-  id: UUID;
-  [key: string | number]: any;
+  readonly id: EntityID;
 }
 
 class Table<T extends TableRow> {
-  #items: { [key: UUID]: T } = {};
+  private items: { [key: EntityID]: T } = {};
 
-  public add(data: T): T {
-    const id = randomUUID();
-    data.id = id;
-    return (this.#items[id] = data as T);
+  add(data: object): T {
+    const id = randomEntityID();
+    const row = { ...data, id } as T;
+    return (this.items[id] = row);
   }
 
-  public delete(id: UUID): boolean {
-    return delete this.#items[id];
+  delete(id: EntityID): boolean {
+    return delete this.items[id];
   }
 
-  public update(id: UUID, data: T): T {
+  update(id: EntityID, data: T): T {
     const item = this.get(id);
     data = { ...(item ?? {}), ...data } as T;
-    return (this.#items[id] = data);
+    return (this.items[id] = data);
   }
 
-  public get(id: UUID): T | null {
-    return this.#items[id] ?? null;
+  get(id: EntityID): T | null {
+    return this.items[id] ?? null;
   }
 
-  public all(): T[] {
-    return Object.values(this.#items);
+  all(): T[] {
+    return Object.values(this.items);
   }
 }
 
 export default class Database {
   private tables: { [key: string]: Table<TableRow> } = {};
-  getTable(name: string) {
-    return this.tables[name] ?? (this.tables[name] = new Table());
+  getTable<T>(name: string): Table<T & TableRow> {
+    return (
+      (this.tables[name] as Table<T & TableRow>) ??
+      (this.tables[name] = new Table<T & TableRow>())
+    );
   }
 }

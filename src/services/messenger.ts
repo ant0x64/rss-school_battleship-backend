@@ -22,13 +22,13 @@ export enum ResponceTypes {
 }
 
 export type Message = {
-  type: RequestTypes | ResponceTypes;
-  data: { [key: string]: object | string | number | boolean };
+  readonly type: RequestTypes | ResponceTypes;
+  readonly data: { [key: string]: object | string | number | boolean };
 };
 
 export type Responce = {
-  type: ResponceTypes;
-  data: string;
+  readonly type: ResponceTypes;
+  readonly data: string;
 };
 
 export type WebSocket = WsWebSocket;
@@ -39,12 +39,15 @@ export class MessageError extends Error {}
 export class MessageBodyError extends MessageError {}
 
 export default class Messenger {
-  static parseMessage(message: string = ''): Message | null {
+  static parseMessage(m: string = ''): Message | null {
     try {
-      const request = JSON.parse(message);
-      request.data = request.data ? JSON.parse(request.data) : undefined;
+      const message = JSON.parse(m);
+      message.data =
+        typeof message.data === 'string' && message.data.length
+          ? JSON.parse(message.data)
+          : {};
 
-      return request as Message;
+      return message as Message;
     } catch {}
 
     return null;
@@ -58,10 +61,10 @@ export default class Messenger {
       recipient = [recipient];
     }
 
-    const responce = {
+    const responce: Responce = {
       type: type,
       data: JSON.stringify(data),
-    } as Responce;
+    };
 
     recipient.map((ws) => {
       ws.send(JSON.stringify(responce));

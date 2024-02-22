@@ -9,11 +9,11 @@
     },
     "scripts": {
       "start": "ts-node-dev src/server",
-      "start:prod": "tsc && webpack --mode=production && node dist/server.min",
+      "start:prod": "npm run build && node dist/server.min",
       "format": "prettier --write \"src/**/*.ts\"",
       "lint": "eslint \"src/**/*.ts\" --fix",
       "test": "echo \"Error: no test specified\" && exit 1",
-      "build": "tsc"
+      "build": "tsc && webpack --mode=production"
     },
     "dependencies": {
       "ws": "^8.16.0",

@@ -3,8 +3,8 @@ import Player from './player';
 import Game, { GamePlayersError } from './game';
 
 export default class Room {
-  protected players: Map<any, Player> = new Map();
   readonly id: ModelId;
+  protected players: Map<ModelId, Player> = new Map();
 
   constructor(id: ModelId) {
     this.id = id;
@@ -15,18 +15,11 @@ export default class Room {
   }
 
   addPlayer(player: Player) {
-    if (this.isFull()) {
-      throw new GamePlayersError();
-    }
     this.players.set(player.user.id, player);
   }
 
   removePlayer(player: Player) {
-    this.players.delete(player);
-  }
-
-  hasPlayer(player: Player) {
-    return this.players.has(player);
+    this.players.delete(player.user.id);
   }
 
   getPlayers() {

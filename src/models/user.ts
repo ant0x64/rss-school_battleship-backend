@@ -1,12 +1,32 @@
 import { FieldsMap, hasRequiredFields } from '../utils/fields';
-import DatabaseModel, { ModelErrorFields } from './abstract';
+import DatabaseModel, { ModelId, ModelErrorFields } from './abstract';
 
-export default interface User extends DatabaseModel {
+export interface UserObject {
   name: string;
   password: string;
 }
 
+export default class User implements DatabaseModel {
+  readonly id: ModelId;
+  readonly name: string;
+  protected password: string;
+
+  constructor(data: UserObject & { id: ModelId }) {
+    checkUserData(data);
+    this.id = data.id;
+    this.name = data.name;
+    this.password = data.password;
+  }
+
+  checkPassword(password: string | undefined) {
+    return this.password === password;
+  }
+}
+
 const requiredFields: FieldsMap = {
+  id: {
+    required: true,
+  },
   name: {
     required: true,
     type: 'string',
@@ -17,9 +37,9 @@ const requiredFields: FieldsMap = {
   },
 };
 
-export const createUserModel = (obj: object | User): User => {
+export const checkUserData = (obj: object): obj is User => {
   if (hasRequiredFields<User>(obj, requiredFields)) {
     throw new ModelErrorFields();
   }
-  return obj as User;
+  return true;
 };

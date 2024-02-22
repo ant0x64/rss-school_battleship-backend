@@ -1,38 +1,37 @@
-import { randomUUID } from 'node:crypto';
+import { randomModelId } from './abstract';
 import User from './user';
 import Player from './player';
 import Game, { GameError } from './game';
 
-import Messenger, { BotSocket, ResponceTypes } from './../services/messenger';
-
-type BotUser = User;
+import Messenger, { BotSocket, ResponceTypes } from '../services/messenger';
 
 export default class Bot extends Player {
-  game: Game | undefined;
+  private game: Game | undefined;
 
   constructor() {
-    const user: BotUser = {
+    const user = new User({
       name: 'Bot',
-      id: randomUUID(),
-      password: '',
-    };
+      id: randomModelId(),
+      password: 'any',
+    });
     const ws: BotSocket = {
       send: (message) => {
         const responce = Messenger.parseMessage(message.toString());
         if (
-          responce?.type === ResponceTypes.GAME_TURN &&
-          responce.data.currentPlayer === user.id
+          responce &&
+          responce.type === ResponceTypes.GAME_TURN &&
+          responce.data?.currentPlayer === user.id
         ) {
           if (!this.game) {
-            throw new GameError('Game not specified');
+            throw new GameError('Bot: game not specified');
           }
-          console.log(`Bot with id:${this.user.id} atacks`);
+          console.log(`Bot: atacks from as ${this.user.id}`);
           this.game?.autoAtack(this);
         }
       },
     };
     super(user, ws);
-    console.log(`Bot with id:${this.user.id} created`);
+    console.log(`Bot: created as ${this.user.id}`);
   }
 
   setGame(game: Game) {

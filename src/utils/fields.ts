@@ -1,22 +1,29 @@
 export type FieldsMap = {
   [key: string | '*']: {
     required: boolean;
-    type: 'array' | 'number' | 'string' | 'object';
+    type?: 'array' | 'number' | 'string' | 'object';
     child?: FieldsMap;
   };
 };
 
+const hasKey = (key: string, object: object): key is keyof typeof object => {
+  return key in object;
+};
+
 export const hasRequiredFields = <T>(
-  obj: any,
+  obj: unknown,
   requiredFields: FieldsMap,
 ): obj is T => {
+  if (obj === null || typeof obj !== 'object') {
+    return true;
+  }
   for (const key of Object.keys(requiredFields)) {
     const params = requiredFields[key];
-    const objectItem = obj[key];
+    const objectItem = hasKey(key, obj) ? (obj[key] as unknown) : undefined;
     if (!params) {
       continue;
     }
-    if (obj.hasOwnProperty(key) && objectItem !== undefined) {
+    if (objectItem !== undefined) {
       switch (params.type) {
         case 'string':
           if (
@@ -41,7 +48,7 @@ export const hasRequiredFields = <T>(
           } else if (params.required && !objectItem.length) {
             return true;
           } else if (params.child && objectItem.length) {
-            const arrayObject: { [key: number]: any } = {};
+            const arrayObject: { [key: number]: unknown } = {};
             const childForAll = params.child['*'];
 
             objectItem.map((el, key) => {
@@ -64,7 +71,7 @@ export const hasRequiredFields = <T>(
           }
           break;
         case 'number':
-          if (!(typeof obj[key] === 'number')) {
+          if (!(typeof objectItem === 'number')) {
             return true;
           }
           break;

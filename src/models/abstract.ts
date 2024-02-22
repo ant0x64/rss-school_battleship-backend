@@ -1,6 +1,7 @@
-import { TableRow } from './../services/db.service';
+import { TableRow, EntityID, randomEntityID } from '../services/db.service';
 
-export type ModelId = TableRow['id'];
+export type ModelId = EntityID;
+export const randomModelId = randomEntityID;
 
 export default interface DatabaseModel extends TableRow {}
 

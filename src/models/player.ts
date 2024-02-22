@@ -3,7 +3,7 @@ import User from './user';
 import Messenger, {
   ResponceTypes,
   WebSocketPlayer,
-} from './../services/messenger';
+} from '../services/messenger';
 
 export default class Player {
   readonly ws: WebSocketPlayer;
@@ -17,8 +17,6 @@ export default class Player {
   }
 
   message(type: ResponceTypes, data: object) {
-    if (this.ws) {
-      Messenger.sendResponce(type, this.ws, data);
-    }
+    Messenger.sendResponce(type, this.ws, data);
   }
 }

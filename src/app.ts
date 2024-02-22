@@ -8,18 +8,18 @@ import Messenger, {
 import Database from './services/db.service';
 
 import { ModelId } from './models/abstract';
-import User, { createUserModel } from './models/user';
+import User, { UserObject } from './models/user';
 import Player from './models/player';
 import Bot from './models/bot';
 import Room from './models/room';
 import Game, { GameEvents } from './models/game';
 
+export class AppError extends Error {}
+
 export enum AppEvents {
   WINNERS = 'winners',
   ROOMS = 'rooms',
 }
-
-export class AppError extends Error {}
 
 export default class App extends EventEmitter {
   private _database: Database = new Database();
@@ -54,40 +54,63 @@ export default class App extends EventEmitter {
     });
   }
 
+  protected authUser(ws: WebSocket, name?: string, password?: string): Player {
+    const data = { name, password } as UserObject;
+
+    const userRow =
+      this._database
+        .getTable<UserObject>('user')
+        .all()
+        .find((row) => {
+          return row.name === name;
+        }) || this._database.getTable<UserObject>('user').add(data);
+
+    const user = new User(userRow);
+
+    if (!user.checkPassword(data.password)) {
+      throw new AppError('Incorrect password');
+    }
+
+    if (this._players.has(user.id)) {
+      throw new AppError('You already have an open session');
+    }
+
+    const player = new Player(user, ws);
+    this._players.set(userRow.id, player);
+    ws.on('close', () => {
+      this._players.delete(userRow.id);
+      this.emit(AppEvents.ROOMS);
+      this.emit(AppEvents.WINNERS);
+    });
+
+    this.emit(AppEvents.ROOMS);
+    this.emit(AppEvents.WINNERS);
+
+    return this._players.get(userRow.id) as Player;
+  }
+
   protected getPlayer(id: ModelId) {
     return this._players.get(id);
+  }
+
+  protected addRoom(id: ModelId) {
+    let room = this.getRoom(id);
+    if (!room) {
+      room = new Room(id);
+      this._rooms.set(id, room);
+      this.emit(AppEvents.ROOMS);
+    }
+    return room;
   }
 
   protected getRoom(id: ModelId) {
     return this._rooms.get(id);
   }
 
-  protected getGame(id: ModelId) {
-    return this._games.get(id);
-  }
-
-  protected addRoom(player: Player): Room {
-    let room = this.getRoom(player.user.id);
+  protected addPlayerToRoom(player: Player, id: ModelId) {
+    const room = this.getRoom(id);
     if (!room) {
-      room = new Room(player.user.id);
-      this._rooms.set(player.user.id, room);
-      this.emit(AppEvents.ROOMS);
-    }
-    return room;
-  }
-
-  protected removeRoom(player: Player): boolean {
-    if (this._rooms.delete(player.user.id)) {
-      this.emit(AppEvents.ROOMS);
-      return true;
-    }
-    return false;
-  }
-
-  protected addPlayerToRoom(player: Player, room_id: ModelId) {
-    const room = this.getRoom(room_id);
-    if (!room || room.hasPlayer(player)) {
-      return;
+      throw new AppError(`Room with id ${id} doesn't exist`);
     }
 
     room.addPlayer(player);
@@ -95,7 +118,7 @@ export default class App extends EventEmitter {
       const game = room.buildGame();
       this._games.set(game.id, game);
 
-      game.getPlayers().map((p) => {
+      game.players.map((p) => {
         if (p instanceof Bot) {
           p.setGame(game);
         }
@@ -111,42 +134,13 @@ export default class App extends EventEmitter {
     this.emit(AppEvents.ROOMS);
   }
 
-  protected authUser(ws: WebSocket, name?: string, password?: string): Player {
-    const user = (this._database
-      .getTable('user')
-      .all()
-      .find((row) => {
-        return row.name === name;
-      }) ||
-      this._database
-        .getTable('user')
-        .add(createUserModel({ name, password }))) as User;
-
-    if (!user.id || password !== user.password) {
-      throw new AppError('Incorrect password');
-    }
-
-    if (this._players.has(user.id)) {
-      throw new AppError('You already have an open session');
-    }
-
-    const player = new Player(user, ws);
-    this._players.set(user.id, player);
-    ws.on('close', () => {
-      this._players.delete(user.id);
-      this.emit(AppEvents.ROOMS);
-      this.emit(AppEvents.WINNERS);
-    });
-
-    this.emit(AppEvents.ROOMS);
-    this.emit(AppEvents.WINNERS);
-
-    return this._players.get(user.id) as Player;
+  protected getGame(id: ModelId) {
+    return this._games.get(id);
   }
 
   authUserByCookie(ws: WebSocket, cookie: string) {
-    ws;
-    return cookie ? undefined : undefined;
+    // not implemented
+    cookie && ws ? undefined : undefined;
   }
 
   handleMessage(ws: WebSocket, message: string) {
@@ -164,8 +158,8 @@ export default class App extends EventEmitter {
         try {
           const player = this.authUser(
             ws,
-            request.data.name?.toString(),
-            request.data.password?.toString(),
+            request.data.name as string,
+            request.data.password as string,
           );
           Messenger.sendResponce(ResponceTypes.REG, player.ws, {
             name: player.user.name,
@@ -194,14 +188,14 @@ export default class App extends EventEmitter {
 
     switch (request.type) {
       case RequestTypes.ROOM_CREATE:
-        const room = this.addRoom(player);
+        const room = this.addRoom(player.user.id);
         this.addPlayerToRoom(player, room.id);
         break;
       case RequestTypes.ROOM_PLAYER:
         this.addPlayerToRoom(player, request.data.indexRoom as ModelId);
         break;
       case RequestTypes.GAME_SINGLE: {
-        const room = this.addRoom(player);
+        const room = this.addRoom(player.user.id);
         this.addPlayerToRoom(player, room.id);
         this.addPlayerToRoom(new Bot(), room.id);
         break;
@@ -215,7 +209,7 @@ export default class App extends EventEmitter {
           player,
           typeof request.data.ships === 'object'
             ? request.data.ships
-            : undefined,
+            : undefined, // autogenerating
         );
         break;
       }
