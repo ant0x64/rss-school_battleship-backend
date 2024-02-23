@@ -29,10 +29,11 @@ export type Message = {
 export type Responce = {
   readonly type: ResponceTypes;
   readonly data: string;
+  id: 0;
 };
 
-export type WebSocket = WsWebSocket;
-export type BotSocket = Pick<WebSocket, 'send'>;
+export interface WebSocket extends WsWebSocket {}
+export type BotSocket = Pick<WebSocket, 'send' | 'on'>;
 export type WebSocketPlayer = WebSocket | BotSocket;
 
 export class MessageError extends Error {}
@@ -64,7 +65,10 @@ export default class Messenger {
     const responce: Responce = {
       type: type,
       data: JSON.stringify(data),
+      id: 0,
     };
+
+    console.log(`Messanger: sends the message ${JSON.stringify(responce)}`);
 
     recipient.map((ws) => {
       ws.send(JSON.stringify(responce));

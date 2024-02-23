@@ -400,7 +400,6 @@ export default class Game extends EventEmitter {
         this.emit(GameEvents.FINISHED);
         return;
       } else if (board.lastKilled) {
-        // WHY BACKEND ..
         const shipCoords = board.getShipCoordinates(board.lastKilled);
         const coordsAround = board.getPointsAround(board.lastKilled);
         shipCoords.map(([x, y]) => {
@@ -444,7 +443,6 @@ export default class Game extends EventEmitter {
   }
 
   autoAtack(player: Player) {
-    // WHY BACKEND?..
     const opponent = this.getOpponent(player);
     const board = this.getBoard(opponent);
 

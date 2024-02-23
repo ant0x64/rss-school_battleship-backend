@@ -1,4 +1,4 @@
-import { ModelId } from './abstract';
+import { ModelId, randomModelId } from './abstract';
 import Player from './player';
 import Game, { GamePlayersError } from './game';
 
@@ -6,8 +6,11 @@ export default class Room {
   readonly id: ModelId;
   protected players: Map<ModelId, Player> = new Map();
 
-  constructor(id: ModelId) {
-    this.id = id;
+  constructor(player?: Player) {
+    this.id = randomModelId();
+    if (player) {
+      this.addPlayer(player);
+    }
   }
 
   isFull() {
@@ -15,11 +18,14 @@ export default class Room {
   }
 
   addPlayer(player: Player) {
+    if (this.isFull()) {
+      throw new GamePlayersError();
+    }
     this.players.set(player.user.id, player);
   }
 
   removePlayer(player: Player) {
-    this.players.delete(player.user.id);
+    return this.players.delete(player.user.id);
   }
 
   getPlayers() {

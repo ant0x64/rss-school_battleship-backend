@@ -77,14 +77,6 @@ export default class App extends EventEmitter {
 
     const player = new Player(user, ws);
     this._players.set(userRow.id, player);
-    ws.on('close', () => {
-      this._players.delete(userRow.id);
-      this.emit(AppEvents.ROOMS);
-      this.emit(AppEvents.WINNERS);
-    });
-
-    this.emit(AppEvents.ROOMS);
-    this.emit(AppEvents.WINNERS);
 
     return this._players.get(userRow.id) as Player;
   }
@@ -93,13 +85,17 @@ export default class App extends EventEmitter {
     return this._players.get(id);
   }
 
-  protected addRoom(id: ModelId) {
-    let room = this.getRoom(id);
-    if (!room) {
-      room = new Room(id);
-      this._rooms.set(id, room);
-      this.emit(AppEvents.ROOMS);
+  protected createRoom(player?: Player, only_one = true) {
+    if (player && only_one) {
+      const room = Array.from(this._rooms.values()).find((room) =>
+        room.getPlayers().includes(player),
+      );
+      if (room) {
+        return room;
+      }
     }
+    const room = new Room(player);
+    this._rooms.set(room.id, room);
     return room;
   }
 
@@ -107,31 +103,20 @@ export default class App extends EventEmitter {
     return this._rooms.get(id);
   }
 
-  protected addPlayerToRoom(player: Player, id: ModelId) {
-    const room = this.getRoom(id);
-    if (!room) {
-      throw new AppError(`Room with id ${id} doesn't exist`);
-    }
+  protected deleteRoom(id: ModelId) {
+    return this._rooms.delete(id);
+  }
 
-    room.addPlayer(player);
-    if (room.isFull()) {
-      const game = room.buildGame();
-      this._games.set(game.id, game);
-
-      game.players.map((p) => {
-        if (p instanceof Bot) {
-          p.setGame(game);
-        }
-        this._rooms.delete(p.user.id);
-      });
-
-      game.once(GameEvents.FINISHED, () => {
-        this._games.delete(game.id);
-        this.emit(AppEvents.WINNERS);
-      });
-    }
-
-    this.emit(AppEvents.ROOMS);
+  protected removePlayerFromRooms(player: Player, delete_empty = true) {
+    this._rooms.forEach((room) => {
+      if (
+        room.removePlayer(player) &&
+        !room.getPlayers().length &&
+        delete_empty
+      ) {
+        this._rooms.delete(room.id);
+      }
+    });
   }
 
   protected getGame(id: ModelId) {
@@ -161,12 +146,20 @@ export default class App extends EventEmitter {
             request.data.name as string,
             request.data.password as string,
           );
+          player.ws.on('close', () => {
+            this.removePlayerFromRooms(player);
+            this._players.delete(player.user.id);
+            this.emit(AppEvents.ROOMS);
+            this.emit(AppEvents.WINNERS);
+          });
           Messenger.sendResponce(ResponceTypes.REG, player.ws, {
             name: player.user.name,
             index: player.user.id,
             error: false,
             errorText: null,
           });
+          this.emit(AppEvents.ROOMS);
+          this.emit(AppEvents.WINNERS);
         } catch (err) {
           Messenger.sendResponce(ResponceTypes.REG, ws, {
             error: true,
@@ -188,16 +181,49 @@ export default class App extends EventEmitter {
 
     switch (request.type) {
       case RequestTypes.ROOM_CREATE:
-        const room = this.addRoom(player.user.id);
-        this.addPlayerToRoom(player, room.id);
+        this.createRoom(player);
+        this.emit(AppEvents.ROOMS);
         break;
-      case RequestTypes.ROOM_PLAYER:
-        this.addPlayerToRoom(player, request.data.indexRoom as ModelId);
+      case RequestTypes.ROOM_PLAYER: {
+        const room = this.getRoom(request.data.indexRoom as ModelId);
+        if (!room) {
+          throw new AppError(`Room doesn't exist`);
+        }
+        room.addPlayer(player);
+
+        if (room.isFull()) {
+          this.deleteRoom(room.id);
+          const game = room.buildGame();
+          this._games.set(game.id, game);
+
+          room.getPlayers().forEach((p) => {
+            this.removePlayerFromRooms(p);
+          });
+
+          game.once(GameEvents.FINISHED, () => {
+            this._games.delete(game.id);
+            this.emit(AppEvents.WINNERS);
+          });
+        }
+
+        this.emit(AppEvents.ROOMS);
+
         break;
+      }
       case RequestTypes.GAME_SINGLE: {
-        const room = this.addRoom(player.user.id);
-        this.addPlayerToRoom(player, room.id);
-        this.addPlayerToRoom(new Bot(), room.id);
+        const bot = new Bot();
+        const game = new Game([player, bot]);
+
+        game.once(GameEvents.FINISHED, () => {
+          this._games.delete(game.id);
+          this.emit(AppEvents.WINNERS);
+        });
+
+        bot.setGame(game);
+        this.removePlayerFromRooms(player);
+        this._games.set(game.id, game);
+        this.emit(AppEvents.ROOMS);
+
         break;
       }
       case RequestTypes.GAME_SHIPS: {

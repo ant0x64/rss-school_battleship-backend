@@ -3,7 +3,11 @@ import User from './user';
 import Player from './player';
 import Game, { GameError } from './game';
 
-import Messenger, { BotSocket, ResponceTypes } from '../services/messenger';
+import Messenger, {
+  WebSocket,
+  BotSocket,
+  ResponceTypes,
+} from '../services/messenger';
 
 export default class Bot extends Player {
   private game: Game | undefined;
@@ -15,6 +19,9 @@ export default class Bot extends Player {
       password: 'any',
     });
     const ws: BotSocket = {
+      on: () => {
+        return {} as WebSocket;
+      },
       send: (message) => {
         const responce = Messenger.parseMessage(message.toString());
         if (

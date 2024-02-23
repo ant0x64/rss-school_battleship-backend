@@ -1,15 +1,22 @@
-import { UUID, randomUUID } from 'node:crypto';
+/** @todo uncomment to use UUID instead of number */
+// import { UUID, randomUUID } from 'node:crypto';
+// export type EntityID = UUID;
+// export const randomEntityID = (): EntityID => {
+//   return randomUUID();
+// };
 
-export type EntityID = UUID;
+export type EntityID = number;
+
+let lastIncrement = Date.now();
 export const randomEntityID = (): EntityID => {
-  return randomUUID();
+  return lastIncrement++;
 };
 
 export interface TableRow {
   readonly id: EntityID;
 }
 
-class Table<T extends TableRow> {
+export class Table<T extends TableRow> {
   private items: { [key: EntityID]: T } = {};
 
   add(data: object): T {
