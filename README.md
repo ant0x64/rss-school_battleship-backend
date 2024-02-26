@@ -12,33 +12,35 @@ Make sure you have the following installed on your machine:
 - [npm](https://www.npmjs.com/) (Node Package Manager)
 
 
-## How to install
+## How to run the game
 
-1. Clone the respository
+1. Clone and launch the front-end instance of the [Battleship game](https://github.com/rolling-scopes-school/websockets-ui)
+   ```bash
+    git clone https://github.com/rolling-scopes-school/websockets-ui.git
+    npm install
+    npm run start
+   ```
+
+2. Clone this repository as a separated project 
    ```bash
    git clone https://github.com/ant0x64/rss-school_battleship-backend.git
-2. Change the branch
+   ```
+
+3. Change the branch
     ```bash
     git pull origin dev && git checkout dev
     ```
-3. Install dependencies
+4. Install dependencies
     ```bash
     npm install
     ```
-    **Note**: Installing ts-node and ts-node-dev Globally
 
-    On some systems, you may encounter permission issues or access problems when running ts-node or ts-node-dev within your project. To prevent such issues, consider installing ts-node and ts-node-dev globally on your machine using the following commands:
-    ```bash
-    npm install -g ts-node ts-node-dev
-    ```
-
-4. Setup the ENV
+5. Setup the ENV
    
-    You can change the ports used in the configuration file `<root_dir>/.env`.
+    You can change the port used in the configuration file `<root_dir>/.env`.
 
-5. Running the Application
+6. Run the back-end application
    ```bash
    npm run start # dev mode
    npm run start:prod # build and run prod mode
-   npm run test # execute testing scripts
    ```
