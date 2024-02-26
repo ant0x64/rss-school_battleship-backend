@@ -15,6 +15,8 @@ const server = new WebSocketServer({ port }, () => {
 });
 
 server.on('connection', (ws: WebSocket, req) => {
+  ws.on('error', console.error);
+
   if (req.headers.cookie) app.authUserByCookie(ws, req.headers.cookie);
 
   console.log('Server: connection established');
@@ -27,5 +29,9 @@ server.on('connection', (ws: WebSocket, req) => {
     } catch (err) {
       console.error(err);
     }
+  });
+
+  ws.on('close', () => {
+    console.log('Server: connection closed');
   });
 });

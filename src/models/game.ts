@@ -301,7 +301,7 @@ export default class Game extends EventEmitter {
     this.on(GameEvents.START, () => {
       this.players.map((player) => {
         player.message(ResponceTypes.GAME_START, {
-          ships: this.getBoard(player).ships,
+          ships: Array.from(this.getBoard(player).ships.values()),
           currentPlayerIndex: player.user.id,
         });
       });
@@ -352,6 +352,15 @@ export default class Game extends EventEmitter {
         currentPlayer: this.turn.user.id,
       });
     });
+  }
+
+  abandon() {
+    this.players.map((p) => {
+      p.message(ResponceTypes.GAME_FINISH, {
+        winPlayer: null,
+      });
+    });
+    this.emit(GameEvents.FINISHED);
   }
 
   atack(player: Player, x: number, y: number) {

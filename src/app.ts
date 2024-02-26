@@ -123,6 +123,14 @@ export default class App extends EventEmitter {
     return this._games.get(id);
   }
 
+  protected abandonPlayerGames(player: Player) {
+    this._games.forEach((game) => {
+      if (game.players.includes(player)) {
+        game.abandon();
+      }
+    });
+  }
+
   authUserByCookie(ws: WebSocket, cookie: string) {
     // not implemented
     cookie && ws ? undefined : undefined;
@@ -148,6 +156,7 @@ export default class App extends EventEmitter {
           );
           player.ws.on('close', () => {
             this.removePlayerFromRooms(player);
+            this.abandonPlayerGames(player);
             this._players.delete(player.user.id);
             this.emit(AppEvents.ROOMS);
             this.emit(AppEvents.WINNERS);
