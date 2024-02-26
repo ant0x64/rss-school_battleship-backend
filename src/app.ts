@@ -36,7 +36,7 @@ export default class App extends EventEmitter {
         Array.from(this._players, ([, player]) => ({
           name: player.user.name,
           wins: player.wins,
-        })),
+        })).sort((a, b) => b.wins - a.wins),
       );
     });
     this.on(AppEvents.ROOMS, () => {
