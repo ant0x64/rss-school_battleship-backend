@@ -1,0 +1,43 @@
+{
+    "name": "nodejs-battleship",
+    "version": "1.0.0",
+    "description": "",
+    "author": "ant0x64",
+    "license": "MIT",
+    "engines": {
+      "node": ">=20.11.0"
+    },
+    "scripts": {
+      "start": "tsx src/server",
+      "start:prod": "npm run build && node dist/server.min",
+      "format": "prettier --write \"src/**/*.ts\"",
+      "lint": "eslint \"src/**/*.ts\" --fix",
+      "test": "echo \"Error: no test specified\" && exit 1",
+      "build": "tsc && webpack --mode=production"
+    },
+    "dependencies": {
+      "ws": "^8.16.0",
+      "dotenv": "^16.4.1"
+    },
+    "devDependencies": {
+      "typescript": "^5.3.3",
+      "@types/node": "^20.11.16",
+      "ts-node": "^10.9.1",
+      "tsx": "^4.7.1",
+
+      "@types/ws": "8.5.10",
+
+      "prettier": "^3.2.5",
+
+      "eslint": "^8.56.0",
+      "@typescript-eslint/eslint-plugin": "^6.21.0",
+      "@typescript-eslint/parser": "^6.21.0",
+      "eslint-config-prettier": "^9.1.0",
+      "eslint-plugin-prettier": "^5.1.3",
+
+      "webpack": "^5.90.1",
+      "webpack-cli": "^5.1.4",
+      "node-loader": "^2.0.0"
+    }
+  }
+  
